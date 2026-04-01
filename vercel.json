@@ -1,5 +1,8 @@
 {
   "version": 2,
   "public": true,
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "toolbarSettings": {
+    "toolbar": "hide"
+  }
 }
