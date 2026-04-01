@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClubOS Admin — Ballantyne CC</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:       #0D1F17;
+    --panel:    #0A1A12;
+    --card:     #162B1F;
+    --card2:    #1A3025;
+    --gold:     #C9A84C;
+    --gold-dim: rgba(201,168,76,0.18);
+    --green:    #4E9966;
+    --green-dim:rgba(78,153,102,0.15);
+    --white:    #F5F0E8;
+    --dim:      rgba(245,240,232,0.5);
+    --faint:    rgba(245,240,232,0.12);
+    --sep:      rgba(201,168,76,0.18);
+    --red:      #E05252;
+    --navy:     #0B1B2B;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--white); min-height:100vh; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background:var(--panel); border-bottom:1px solid var(--sep);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 32px; height:64px; position:sticky; top:0; z-index:100;
+  }
+  .topbar-left { display:flex; align-items:center; gap:16px; }
+  .logo { font-family:'Cormorant Garamond',serif; font-size:22px; color:var(--gold); font-weight:600; letter-spacing:2px; }
+  .club-tag { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); border-left:1px solid var(--sep); padding-left:16px; }
+  .topbar-right { display:flex; align-items:center; gap:12px; }
+  .live-badge { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--green); letter-spacing:1px; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 1.4s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+  .date-tag { font-family:'DM Mono',monospace; font-size:13px; color:var(--dim); }
+
+  /* ── LAYOUT ── */
+  .layout { display:grid; grid-template-columns:300px 1fr; min-height:calc(100vh - 64px); }
+
+  /* ── SIDEBAR ── */
+  .sidebar { background:var(--panel); border-right:1px solid var(--sep); padding:24px 0; display:flex; flex-direction:column; gap:4px; }
+  .sidebar-label { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); padding:8px 24px 4px; }
+  .nav-item {
+    display:flex; align-items:center; gap:12px;
+    padding:12px 24px; cursor:pointer; color:var(--dim);
+    font-size:14px; font-weight:500; transition:all .2s;
+    border-left:2px solid transparent;
+  }
+  .nav-item:hover { background:var(--faint); color:var(--white); }
+  .nav-item.active { background:var(--green-dim); color:var(--white); border-left-color:var(--green); }
+  .nav-icon { font-size:16px; width:20px; text-align:center; }
+  .nav-count { margin-left:auto; font-family:'DM Mono',monospace; font-size:11px; background:var(--gold-dim); color:var(--gold); padding:2px 8px; border-radius:10px; }
+
+  /* ── MAIN ── */
+  .main { padding:32px; overflow-y:auto; }
+
+  /* ── PAGE HEADER ── */
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px; }
+  .page-title { font-family:'Cormorant Garamond',serif; font-size:32px; color:var(--white); font-weight:600; }
+  .page-sub { font-size:13px; color:var(--dim); margin-top:4px; }
+
+  /* ── STATS ROW ── */
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px; }
+  .stat-card { background:var(--card); border:1px solid var(--sep); border-radius:10px; padding:18px 20px; }
+  .stat-val { font-family:'Cormorant Garamond',serif; font-size:36px; color:var(--white); font-weight:600; line-height:1; }
+  .stat-val.green { color:var(--green); }
+  .stat-val.gold  { color:var(--gold); }
+  .stat-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-top:4px; }
+
+  /* ── COURT GRID ── */
+  .court-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px; }
+  .court-card {
+    background:var(--card); border:1px solid var(--sep); border-radius:10px;
+    padding:20px; cursor:pointer; transition:all .2s; position:relative; overflow:hidden;
+  }
+  .court-card:hover { border-color:var(--gold); background:var(--card2); }
+  .court-card.has-reservation { border-color:rgba(201,168,76,0.35); }
+  .court-card.is-clinic { border-color:rgba(140,100,240,0.4); }
+  .court-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,var(--gold),var(--green)); opacity:0.5;
+  }
+  .court-num { font-family:'Cormorant Garamond',serif; font-size:28px; color:var(--gold); font-weight:700; line-height:1; }
+  .court-surface { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-bottom:12px; margin-top:2px; }
+  .court-status-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+    padding:4px 10px; border-radius:4px; margin-bottom:10px;
+  }
+  .badge-available { background:var(--green-dim); color:var(--green); border:1px solid rgba(78,153,102,.3); }
+  .badge-booked    { background:var(--gold-dim);  color:var(--gold);  border:1px solid rgba(201,168,76,.3); }
+  .badge-clinic    { background:rgba(140,100,240,.12); color:rgba(180,150,255,.9); border:1px solid rgba(140,100,240,.3); }
+  .badge-closed    { background:rgba(224,82,82,.12);   color:#F09090; border:1px solid rgba(224,82,82,.3); }
+
+  .court-player { font-size:14px; font-weight:600; color:var(--white); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .court-time   { font-family:'DM Mono',monospace; font-size:12px; color:var(--dim); }
+  .court-notes  { font-size:11px; color:var(--dim); margin-top:4px; font-style:italic; }
+  .court-empty  { font-size:13px; color:var(--faint); font-style:italic; margin-top:4px; }
+  .court-actions { display:flex; gap:8px; margin-top:14px; }
+  .btn-sm {
+    flex:1; padding:8px 0; border-radius:6px; border:none; cursor:pointer;
+    font-size:12px; font-weight:600; letter-spacing:.5px; transition:all .2s;
+  }
+  .btn-add   { background:var(--green); color:var(--bg); }
+  .btn-add:hover { background:#5fb878; }
+  .btn-clear { background:rgba(224,82,82,.15); color:var(--red); border:1px solid rgba(224,82,82,.3); }
+  .btn-clear:hover { background:rgba(224,82,82,.25); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s;
+    backdrop-filter:blur(4px);
+  }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--card); border:1px solid var(--sep); border-radius:14px;
+    padding:32px; width:480px; max-width:90vw;
+    transform:translateY(16px); transition:transform .2s;
+  }
+  .modal-overlay.open .modal { transform:translateY(0); }
+  .modal-title { font-family:'Cormorant Garamond',serif; font-size:26px; color:var(--white); font-weight:600; margin-bottom:6px; }
+  .modal-sub { font-size:13px; color:var(--dim); margin-bottom:24px; }
+  .form-group { margin-bottom:18px; }
+  .form-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:6px; display:block; }
+  .form-input, .form-select {
+    width:100%; padding:12px 14px; background:var(--panel); border:1px solid var(--sep);
+    border-radius:7px; color:var(--white); font-size:14px; font-family:'DM Sans',sans-serif;
+    outline:none; transition:border-color .2s;
+  }
+  .form-input:focus, .form-select:focus { border-color:var(--gold); }
+  .form-select option { background:var(--panel); }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-actions { display:flex; gap:10px; margin-top:24px; }
+  .btn-primary {
+    flex:1; padding:13px; background:var(--gold); color:var(--bg);
+    border:none; border-radius:8px; font-size:14px; font-weight:700;
+    cursor:pointer; transition:background .2s; letter-spacing:.5px;
+  }
+  .btn-primary:hover { background:#d4b55a; }
+  .btn-primary:disabled { background:var(--gold-dim); color:var(--dim); cursor:not-allowed; }
+  .btn-cancel {
+    padding:13px 20px; background:transparent; border:1px solid var(--sep);
+    color:var(--dim); border-radius:8px; font-size:14px; cursor:pointer; transition:all .2s;
+  }
+  .btn-cancel:hover { border-color:var(--white); color:var(--white); }
+
+  /* ── ACTIVITY FEED ── */
+  .activity-feed { background:var(--card); border:1px solid var(--sep); border-radius:10px; padding:20px; }
+  .feed-title { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); margin-bottom:16px; }
+  .feed-item { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--faint); align-items:flex-start; }
+  .feed-item:last-child { border-bottom:none; }
+  .feed-icon { width:32px; height:32px; border-radius:50%; background:var(--green-dim); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .feed-content {}
+  .feed-main { font-size:14px; color:var(--white); font-weight:500; }
+  .feed-sub  { font-size:12px; color:var(--dim); margin-top:2px; }
+  .feed-time { font-family:'DM Mono',monospace; font-size:11px; color:var(--gold); margin-left:auto; flex-shrink:0; }
+
+  /* ── TOAST ── */
+  .toast {
+    position:fixed; bottom:24px; right:24px; z-index:300;
+    background:var(--green); color:var(--bg); padding:14px 20px;
+    border-radius:8px; font-weight:600; font-size:14px;
+    transform:translateY(80px); opacity:0; transition:all .3s;
+    display:flex; align-items:center; gap:8px;
+  }
+  .toast.show { transform:translateY(0); opacity:1; }
+
+  /* ── SECTIONS ── */
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .section-title-sm { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); }
+
+  /* hidden pages */
+  .page { display:none; }
+  .page.active { display:block; }
+
+  /* ── ASSETS PAGE ── */
+  .asset-drop {
+    border:2px dashed var(--sep); border-radius:10px; padding:48px 24px;
+    text-align:center; color:var(--dim); cursor:pointer; transition:all .2s;
+    margin-bottom:20px;
+  }
+  .asset-drop:hover { border-color:var(--gold); color:var(--white); }
+  .asset-drop .drop-icon { font-size:36px; margin-bottom:12px; }
+  .asset-drop .drop-text { font-size:14px; }
+  .asset-drop .drop-sub  { font-size:12px; margin-top:4px; }
+  .asset-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .asset-card { background:var(--card); border:1px solid var(--sep); border-radius:8px; overflow:hidden; }
+  .asset-thumb { height:120px; background:var(--card2); display:flex; align-items:center; justify-content:center; font-size:32px; }
+  .asset-info { padding:12px; }
+  .asset-name { font-size:13px; font-weight:600; color:var(--white); }
+  .asset-meta { font-size:11px; color:var(--dim); margin-top:2px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">ClubOS</div>
+    <div class="club-tag">Ballantyne Country Club · Admin</div>
+  </div>
+  <div class="topbar-right">
+    <div class="live-badge"><div class="live-dot"></div> Live</div>
+    <div class="date-tag" id="topDate">—</div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Manage</div>
+    <div class="nav-item active" onclick="showPage('courts')">
+      <span class="nav-icon">🎾</span> Court Schedule
+      <span class="nav-count" id="navAvailCount">—</span>
+    </div>
+    <div class="nav-item" onclick="showPage('assets')">
+      <span class="nav-icon">🖼️</span> Content Assets
+    </div>
+    <div class="sidebar-label" style="margin-top:12px">Display</div>
+    <div class="nav-item" onclick="window.open('https://clubos-display-ballantyne.vercel.app','_blank')">
+      <span class="nav-icon">📺</span> View Live Display
+    </div>
+    <div class="nav-item" onclick="window.open('https://clubos-display-ballantyne.vercel.app/?announce','_blank')">
+      <span class="nav-icon">📢</span> Preview Announcement
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ── COURTS PAGE ── -->
+    <div class="page active" id="page-courts">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Tennis Courts</div>
+          <div class="page-sub" id="courtPageSub">Loading today's schedule...</div>
+        </div>
+        <button class="btn-primary" style="width:auto;padding:10px 20px;font-size:13px" onclick="openAddModal(null)">
+          + Add Reservation
+        </button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-val green" id="statAvail">—</div>
+          <div class="stat-label">Available Now</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val gold" id="statBooked">—</div>
+          <div class="stat-label">Reserved</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statClinic">—</div>
+          <div class="stat-label">Clinics / Events</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statTotal">7</div>
+          <div class="stat-label">Total Courts</div>
+        </div>
+      </div>
+
+      <!-- Court cards -->
+      <div class="section-header">
+        <div class="section-title-sm">Current Status — All 7 Courts</div>
+        <div style="font-size:12px;color:var(--dim)">Updates live on display · <span style="color:var(--gold)" id="lastRefresh">—</span></div>
+      </div>
+      <div class="court-grid" id="courtGrid">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Activity feed -->
+      <div class="activity-feed">
+        <div class="feed-title">Recent Activity</div>
+        <div id="activityFeed">
+          <div class="feed-item">
+            <div class="feed-icon">⏳</div>
+            <div class="feed-content">
+              <div class="feed-main">Loading activity...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ASSETS PAGE ── -->
+    <div class="page" id="page-assets">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Content Assets</div>
+          <div class="page-sub">Upload graphics for your display announcements</div>
+        </div>
+      </div>
+      <div class="asset-drop" onclick="document.getElementById('fileInput').click()">
+        <div class="drop-icon">📁</div>
+        <div class="drop-text">Drop files here or click to upload</div>
+        <div class="drop-sub">JPEG, PNG · We'll format it for the display</div>
+      </div>
+      <input type="file" id="fileInput" style="display:none" accept="image/*" onchange="handleFileUpload(this)">
+      <div class="section-header">
+        <div class="section-title-sm">Uploaded Assets</div>
+      </div>
+      <div class="asset-grid" id="assetGrid">
+        <div class="asset-card">
+          <div class="asset-thumb">📋</div>
+          <div class="asset-info">
+            <div class="asset-name">Men's Saturday Clinic</div>
+            <div class="asset-meta">Built by ClubOS · Live in rotation</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ADD RESERVATION MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-title">Add Court Reservation</div>
+    <div class="modal-sub" id="modalSub">Appears on the display immediately</div>
+    <div class="form-group">
+      <label class="form-label">Court</label>
+      <select class="form-select" id="fCourt">
+        <option value="1">Court 1 — Clay · Singles</option>
+        <option value="2">Court 2 — Clay · Singles</option>
+        <option value="3">Court 3 — Clay · Singles</option>
+        <option value="4">Court 4 — Clay · Doubles</option>
+        <option value="5">Court 5 — Clay · Doubles</option>
+        <option value="6">Court 6 — Hard · Doubles</option>
+        <option value="7">Court 7 — Hard · Doubles</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Player Name(s)</label>
+      <input type="text" class="form-input" id="fPlayers" placeholder="e.g. Garrity / Smith">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Start Time</label>
+        <input type="time" class="form-input" id="fStart">
+      </div>
+      <div class="form-group">
+        <label class="form-label">End Time</label>
+        <input type="time" class="form-input" id="fEnd">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Type</label>
+      <select class="form-select" id="fType">
+        <option value="booked">Member Reservation</option>
+        <option value="clinic">Clinic / Program</option>
+        <option value="closed">Court Closed</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <input type="text" class="form-input" id="fNotes" placeholder="e.g. Instructor: Martinez">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" id="saveBtn" onclick="saveReservation()">Save to Display</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL  = 'https://ykfvwqewnfnibpzytspn.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZnZ3cWV3bmZuaWJwenl0c3BuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUxNzUzMDQsImV4cCI6MjA2MDc1MTMwNH0.gE3vvqSxFd_oCpalOoRhgzDgSdlkZ8AqRMOkSjFWzN4';
+const CLUB_ID       = 'b652375e-952e-4675-94a6-cbca9cd3a6f8';
+const COURTS        = [
+  { num:1, surface:'Clay · Singles' },
+  { num:2, surface:'Clay · Singles' },
+  { num:3, surface:'Clay · Singles' },
+  { num:4, surface:'Clay · Doubles' },
+  { num:5, surface:'Clay · Doubles' },
+  { num:6, surface:'Hard · Doubles' },
+  { num:7, surface:'Hard · Doubles' },
+];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let reservations = [];
+let activityLog  = [];
+
+// ── Date helpers
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hr = parseInt(h);
+  const ampm = hr >= 12 ? 'PM' : 'AM';
+  return `${hr % 12 || 12}:${m} ${ampm}`;
+}
+function nowTimeStr() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+// ── Active reservation for a court right now
+function getActiveReservation(courtNum) {
+  const now = nowTimeStr();
+  return reservations.find(r =>
+    r.court_number === courtNum &&
+    r.start_time <= now && r.end_time > now
+  ) || null;
+}
+
+// ── Load data
+async function loadReservations() {
+  const today = todayStr();
+  const { data, error } = await sb
+    .from('court_reservations')
+    .select('*')
+    .eq('club_id', CLUB_ID)
+    .eq('reservation_date', today)
+    .neq('status', 'cancelled')
+    .order('start_time');
+
+  if (!error && data) {
+    reservations = data;
+    renderCourts();
+    updateStats();
+    document.getElementById('lastRefresh').textContent =
+      new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  }
+}
+
+// ── Render court cards
+function renderCourts() {
+  const grid = document.getElementById('courtGrid');
+  grid.innerHTML = COURTS.map(c => {
+    const active = getActiveReservation(c.num);
+    const upcoming = reservations.filter(r =>
+      r.court_number === c.num && r.start_time > nowTimeStr()
+    ).sort((a,b) => a.start_time.localeCompare(b.start_time))[0];
+
+    let statusBadge, playerHtml, hasClass = '';
+
+    if (active) {
+      hasClass = active.display_type === 'clinic' ? 'is-clinic' : 'has-reservation';
+      const badgeClass = { booked:'badge-booked', clinic:'badge-clinic', closed:'badge-closed' }[active.display_type] || 'badge-booked';
+      const badgeLabel = { booked:'Reserved', clinic:'Clinic', closed:'Closed' }[active.display_type] || 'Reserved';
+      statusBadge = `<div class="court-status-badge ${badgeClass}">● ${badgeLabel}</div>`;
+      playerHtml = `
+        <div class="court-player">${active.member_name}</div>
+        <div class="court-time">${fmtTime(active.start_time)} – ${fmtTime(active.end_time)}</div>
+        ${active.notes ? `<div class="court-notes">${active.notes}</div>` : ''}
+      `;
+    } else {
+      statusBadge = `<div class="court-status-badge badge-available">● Available</div>`;
+      playerHtml = upcoming
+        ? `<div class="court-empty">Next: ${upcoming.member_name}<br>${fmtTime(upcoming.start_time)}</div>`
+        : `<div class="court-empty">No upcoming bookings</div>`;
+    }
+
+    return `
+      <div class="court-card ${hasClass}">
+        <div class="court-num">Court ${c.num}</div>
+        <div class="court-surface">${c.surface}</div>
+        ${statusBadge}
+        ${playerHtml}
+        <div class="court-actions">
+          <button class="btn-sm btn-add" onclick="openAddModal(${c.num})">+ Add</button>
+          ${active ? `<button class="btn-sm btn-clear" onclick="clearCourt('${active.id}',${c.num})">Clear</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Stats
+function updateStats() {
+  const now = nowTimeStr();
+  const active = reservations.filter(r => r.start_time <= now && r.end_time > now);
+  const booked  = active.filter(r => r.display_type === 'booked').length;
+  const clinics = active.filter(r => r.display_type === 'clinic').length;
+  const avail   = 7 - active.length;
+  document.getElementById('statAvail').textContent  = avail;
+  document.getElementById('statBooked').textContent = booked;
+  document.getElementById('statClinic').textContent = clinics;
+  document.getElementById('navAvailCount').textContent = `${avail} open`;
+  document.getElementById('courtPageSub').textContent =
+    `${avail} of 7 courts available right now · ${todayStr()}`;
+}
+
+// ── Modal
+function openAddModal(courtNum) {
+  if (courtNum) document.getElementById('fCourt').value = courtNum;
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(Math.ceil(now.getMinutes()/30)*30 % 60).padStart(2,'0');
+  const h2 = String(now.getHours() + 1).padStart(2,'0');
+  document.getElementById('fStart').value = `${h}:${m === '60' ? '00' : m}`;
+  document.getElementById('fEnd').value   = `${m === '60' ? String(now.getHours()+1).padStart(2,'0') : h}:${m === '60' ? '30' : String((parseInt(m)+90)%60).padStart(2,'0')}`;
+  document.getElementById('fPlayers').value = '';
+  document.getElementById('fNotes').value   = '';
+  document.getElementById('addModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('addModal').classList.remove('open');
+}
+
+// ── Save reservation
+async function saveReservation() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const courtNum  = parseInt(document.getElementById('fCourt').value);
+  const players   = document.getElementById('fPlayers').value.trim();
+  const startTime = document.getElementById('fStart').value;
+  const endTime   = document.getElementById('fEnd').value;
+  const type      = document.getElementById('fType').value;
+  const notes     = document.getElementById('fNotes').value.trim();
+
+  if (!players || !startTime || !endTime) {
+    showToast('⚠️ Please fill in all required fields', true);
+    btn.disabled = false; btn.textContent = 'Save to Display';
+    return;
+  }
+
+  const { data, error } = await sb.from('court_reservations').insert({
+    club_id:          CLUB_ID,
+    sport:            'tennis',
+    court_number:     courtNum,
+    reservation_date: todayStr(),
+    start_time:       startTime,
+    end_time:         endTime,
+    member_name:      players,
+    notes:            notes || null,
+    status:           'confirmed',
+    display_type:     type
+  }).select();
+
+  if (error) {
+    showToast('❌ Error saving — try again', true);
+  } else {
+    closeModal();
+    addActivity(`Court ${courtNum} reserved`, `${players} · ${fmtTime(startTime)}–${fmtTime(endTime)}`, '🎾');
+    await loadReservations();
+    showToast(`✓ Court ${courtNum} updated on display`);
+  }
+
+  btn.disabled = false; btn.textContent = 'Save to Display';
+}
+
+// ── Clear court
+async function clearCourt(id, courtNum) {
+  const { error } = await sb
+    .from('court_reservations')
+    .update({ status: 'cancelled' })
+    .eq('id', id);
+
+  if (!error) {
+    addActivity(`Court ${courtNum} cleared`, 'Reservation removed from display', '✅');
+    await loadReservations();
+    showToast(`✓ Court ${courtNum} now shows Available`);
+  }
+}
+
+// ── Activity feed
+function addActivity(main, sub, icon) {
+  activityLog.unshift({ main, sub, icon, time: new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) });
+  if (activityLog.length > 8) activityLog.pop();
+  renderActivity();
+}
+
+function renderActivity() {
+  const feed = document.getElementById('activityFeed');
+  if (activityLog.length === 0) {
+    feed.innerHTML = '<div class="feed-item"><div class="feed-icon">💤</div><div class="feed-content"><div class="feed-main">No activity yet today</div></div></div>';
+    return;
+  }
+  feed.innerHTML = activityLog.map(a => `
+    <div class="feed-item">
+      <div class="feed-icon">${a.icon}</div>
+      <div class="feed-content">
+        <div class="feed-main">${a.main}</div>
+        <div class="feed-sub">${a.sub}</div>
+      </div>
+      <div class="feed-time">${a.time}</div>
+    </div>
+  `).join('');
+}
+
+// ── Toast
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isError ? 'var(--red)' : 'var(--green)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Page navigation
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ── File upload (stub — shows receipt)
+function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showToast(`✓ ${file.name} received — we'll format it for the display`);
+}
+
+// ── Real-time subscription
+function subscribeRealtime() {
+  sb.channel('court-changes')
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'court_reservations',
+      filter: `club_id=eq.${CLUB_ID}`
+    }, () => loadReservations())
+    .subscribe();
+}
+
+// ── Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('topDate').textContent =
+    now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' +
+    now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+// ── Init
+async function init() {
+  updateClock();
+  setInterval(updateClock, 1000);
+  renderActivity();
+  await loadReservations();
+  subscribeRealtime();
+  setInterval(loadReservations, 30000);
+}
+
+init();
+</script>
+</body>
+</html>
